@@ -6,6 +6,7 @@ import argparse
 import json
 import os
 import sys
+from pathlib import Path
 
 from . import pipeline as P
 from .dense import EmbedderError
@@ -47,6 +48,13 @@ def build_parser() -> argparse.ArgumentParser:
     s.add_argument("--limit", type=int, help="first N questions only (smoke test)")
     s.add_argument("--no-rerank", action="store_true", help="first-stage variants only, no LLM call (no answers)")
     s.add_argument("--evalgen", help="path to an eval-dataset-generator checkout (score + gate the answers)")
+
+    s = sub.add_parser("jev-eval", help="Jev (TypeSafe) reranking experiment over the reference run ([jev] in config)")
+    s.add_argument("--limit", type=int, help="first N questions only (smoke test)")
+    s.add_argument("--no-answers", action="store_true", help="retrieval, latency and cost only; no generation")
+    s.add_argument("--max-usd", type=float, help="override [jev].max_usd")
+    s.add_argument("--max-answer-minutes", type=float, default=20.0,
+                   help="skip answers for a variant whose uncached generations would take longer (default 20)")
 
     s = sub.add_parser("run-all", help="synth, index, eval (and evalgen if configured), report")
     s.add_argument("--skip-synth", action="store_true")
@@ -119,6 +127,26 @@ def main(argv: list[str] | None = None) -> int:
             from .report import write_report
 
             print(f"report: {write_report(cfg)}")
+        elif args.command == "jev-eval":
+            from .jev import JevClient, JevError, JevReranker
+            from .jev_eval import step_jev_eval
+            from .report import write_report
+
+            jcfg = cfg["jev"]
+            client = JevClient(None if args.no_cache else cfg["run"].get("cache"), key_root=Path(args.config).resolve().parent,
+                               timeout=float(jcfg.get("timeout_s", 60)))
+            jev = JevReranker(client, jcfg["model"], float(jcfg["price_usd_per_mtok"]),
+                              args.max_usd if args.max_usd is not None else float(jcfg["max_usd"]))
+            try:
+                step_jev_eval(cfg, provider(), jev, limit=args.limit, answers=not args.no_answers,
+                              max_answer_minutes=args.max_answer_minutes)
+            except JevError as exc:
+                print(f"error: {exc}", file=sys.stderr)
+                return 2
+            finally:
+                client.close()
+            if (Path(cfg["run"]["results_dir"]) / "retrieval_metrics.json").exists():
+                print(f"report: {write_report(cfg)}")
         elif args.command == "run-all":
             if args.evalgen:
                 cfg.setdefault("evalgen", {})["path"] = args.evalgen

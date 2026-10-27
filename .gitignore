@@ -4,3 +4,4 @@ index/
 .cache/
 runs/
 .DS_Store
+.env*

@@ -171,11 +171,16 @@ class CachedProvider:
         self.db.execute("CREATE TABLE IF NOT EXISTS cache (key TEXT PRIMARY KEY, value TEXT NOT NULL)")
         self.hits = 0
         self.misses = 0
+        self.allow_miss = True  # False: a miss raises instead of calling the model (cache-replay phases)
 
     def _key(self, model: str, messages: list[dict], max_tokens: int, top_logprobs: int) -> str:
         extra = {k: getattr(self.inner, k, None) for k in ("temperature", "seed", "num_ctx")}
         raw = json.dumps([self.inner.name, model, messages, max_tokens, top_logprobs, extra], sort_keys=True)
         return hashlib.sha256(raw.encode()).hexdigest()
+
+    def has(self, model: str, messages: list[dict], max_tokens: int = 256, top_logprobs: int = 0) -> bool:
+        key = self._key(model, messages, max_tokens, top_logprobs)
+        return self.db.execute("SELECT 1 FROM cache WHERE key = ?", (key,)).fetchone() is not None
 
     def chat(self, model: str, messages: list[dict], max_tokens: int = 256, top_logprobs: int = 0) -> ChatResult:
         key = self._key(model, messages, max_tokens, top_logprobs)
@@ -186,6 +191,8 @@ class CachedProvider:
             return ChatResult(text=d["text"], latency_s=d["latency_s"], cached=True,
                               top_logprobs=d.get("top_logprobs", []), prompt_tokens=d.get("prompt_tokens"),
                               completion_tokens=d.get("completion_tokens"))
+        if not self.allow_miss:
+            raise ProviderError(f"cache miss with allow_miss=False ({model}); the reference LLM calls are not all cached")
         self.misses += 1
         res = self.inner.chat(model, messages, max_tokens=max_tokens, top_logprobs=top_logprobs)
         self.db.execute("INSERT OR REPLACE INTO cache VALUES (?, ?)", (key, json.dumps({

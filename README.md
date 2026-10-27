@@ -4,7 +4,7 @@ Internal documentation is full of near-duplicates: the same policy for four regi
 
 Everything runs locally: Python standard library plus numpy and requests, and a local Ollama server. The corpus is synthetic and fictional (**Quorvia Instruments**, an invented maker of environmental sensors and a monitoring SaaS).
 
-**Result in one paragraph.** On 135 gold questions (110 answerable, 25 unanswerable), the LLM reranker is the stage that pays: it lifts Recall@1 from 0.564 (hybrid RRF) to 0.900 and cuts wrong-entity contamination in the top 5 from 25.0% to 5.8%, and exact-fact answer accuracy goes from 78.2% to 85.5% (+7.3 points, paired bootstrap 95% CI [+1.8, +13.6]). Fusing BM25 with the dense retriever bought nothing here, because the only dense retriever available offline was LSA, which is itself lexical; RRF slightly *raised* contamination. After verification every variant declined all 25 unanswerable questions. The citation verifier caught one real wrong-entity hallucination, but with this generator it mostly flags citation mistakes on correct sentences, which costs between 0 and 4.5 points of accuracy depending on the variant. Full reference run: 40 minutes on an Apple M5 laptop with 16 GB of RAM, almost all of it LLM time.
+**Result in one paragraph.** On 135 gold questions (110 answerable, 25 unanswerable), the LLM reranker is the stage that pays: it lifts Recall@1 from 0.564 (hybrid RRF) to 0.900 and cuts wrong-entity contamination in the top 5 from 25.0% to 5.8%, and exact-fact answer accuracy goes from 78.2% to 85.5% (+7.3 points, paired bootstrap 95% CI [+1.8, +13.6]). Fusing BM25 with the dense retriever bought nothing here, because the only dense retriever available offline was LSA, which is itself lexical; RRF slightly *raised* contamination. After verification every variant declined all 25 unanswerable questions. The citation verifier caught one real wrong-entity hallucination, but with this generator it mostly flags citation mistakes on correct sentences, which costs between 0 and 4.5 points of accuracy depending on the variant. Full reference run: 40 minutes on an Apple M5 laptop with 16 GB of RAM, almost all of it LLM time. A follow-up experiment replaced the LLM reranker with Jev (TypeSafe), a non-generative model that returns calibrated yes/no probabilities: it matched the LLM (Recall@1 0.918 against 0.900, inside noise) at 0.25 s instead of 6.66 s per question and US$0.17 per 1,000 questions, while fusing its ranking with the hybrid one by RRF gave most of that gain back (Recall@1 0.654).
 
 ## Architecture
 
@@ -117,6 +117,49 @@ The answers were also exported in the format of my eval-dataset-generator projec
 
 Two independent scorers agree on the ranking. One more data point for the gate: on the first run, with the strict verifier, the reranked variant was +0.044 better overall and still **failed** the default gate, because 5 items that passed on the baseline failed on it (limit 3); those were the citation-format removals above. The gate flagged a real behaviour change that the mean hid.
 
+### Jev (TypeSafe) as a reranker
+
+The LLM reranker is the stage that pays, and also the slow one (6.66 s per question). This experiment asks whether Jev (TypeSafe), a System One model that answers typed questions with calibrated probabilities instead of generating text, can do part of that job, and at what quality, latency and cost. Code: `hybridrag/jev.py` (urllib client, sqlite3 cache, request shape, budget cap) and `hybridrag/jev_eval.py` (the experiment); settings under `[jev]` in `config.toml`.
+
+**How Jev is asked.** One request per question. The `state` holds only the user question; each of the fused top 20 chunks becomes one `noul` question whose structured instructions carry the passage and a fixed yes/no question ("Does `passage` answer `user_question`, for exactly the entity that `user_question` asks about?"), with `true`/`false` criteria that mirror the LLM rubric's entity-first top grade. A noul is the probability that the answer is yes, so it is the sort key directly. The service evaluates the 20 nouls in parallel against the same state, so a question costs one round trip. Model pinned to `jev-1.14.0`; price US$0.042 per million input tokens, output not billed; tokens are the `usage` the API reports.
+
+**Variants**, all over the same first-stage lists and the same cached LLM grades as the reference run (a cache miss on the LLM side is an error, so the reference row is replayed, not rerun):
+
+- `hybrid_jev`: the fused top 20 sorted by Jev's noul.
+- `hybrid_jev_rrf`: RRF (k = 60, unchanged) over the fused list and the Jev-sorted top 20. Unpublished earlier research saw Jev alone slightly hurt nDCG while the RRF fusion helped; this tests whether that holds here.
+- `hybrid_jev_llm`, a cascade: Jev keeps its top 8 of the 20 and the LLM grades only those, ties broken by fused rank as in the reference. **N = 8 was fixed before any Jev score existed**: the generator reads 5 chunks, so 8 leaves the LLM 3 places of slack to undo a Jev mistake, and it cuts LLM pairs by 60%; in the fused order alone, ranks 9 to 20 hold the gold chunk for only 4 of 110 questions. A sweep over N = 3 to 20 is reported as sensitivity, not used to choose N. The cascade replays grades the reference run already measured, so its LLM latency is the sum of those stored per-pair latencies, not a new wall-clock measurement.
+
+**Results** (`results/jev/`, also in `results/report.md`). 135 Jev requests, 2,700 pairs, `jev-1.14.0`, run on 2026-10-27:
+
+| variant | Recall@1 | Recall@3 | Recall@5 | MRR@10 | nDCG@10 | Contam@5 | exact-fact acc. after verifier (95% CI) | rerank latency per question (median) |
+|---|---|---|---|---|---|---|---|---|
+| Hybrid (RRF) | 0.564 | 0.773 | 0.827 | 0.679 | 0.733 | 0.250 | 78.2% [70.0, 85.5] | |
+| Hybrid + LLM rerank (reference) | 0.900 | 0.918 | 0.927 | 0.911 | 0.915 | 0.058 | 85.5% [78.2, 91.8] | 6.66 s |
+| Hybrid + Jev rerank | **0.918** | 0.918 | 0.927 | **0.920** | **0.922** | **0.048** | 87.3% [80.9, 92.7] | **0.25 s** |
+| Hybrid + Jev, fused by RRF | 0.654 | 0.873 | 0.900 | 0.771 | 0.810 | 0.135 | 85.5% [78.2, 91.8] | 0.25 s |
+| Hybrid + Jev top 8 + LLM rerank | 0.900 | 0.918 | 0.927 | 0.911 | 0.915 | 0.058 | 88.2% [81.8, 93.6] | 2.90 s (Jev 0.25 + LLM 2.62) |
+
+Paired bootstrap, 95% CI: Jev vs LLM rerank, Recall@1 +0.018 [0.000, +0.045], nDCG@10 +0.007 [0.000, +0.018], exact-fact accuracy +1.8 points [-2.7, +7.3]; Jev fused by RRF vs Jev alone, Recall@1 -0.264 [-0.345, -0.182], nDCG@10 -0.112 [-0.151, -0.076]; cascade vs LLM rerank, every retrieval metric +0.000, exact-fact accuracy +2.7 points [0.0, +6.4].
+
+Cascade sensitivity (the LLM grades only Jev's top N; LLM time replayed from the reference measurements):
+
+| N | 3 | 5 | 8 | 10 | 15 | 20 |
+|---|---|---|---|---|---|---|
+| Recall@1 | 0.900 | 0.900 | 0.900 | 0.900 | 0.900 | 0.900 |
+| gold chunk in Jev's top N | 0.918 | 0.927 | 0.927 | 0.927 | 0.927 | 0.927 |
+| gold chunk in the fused top N | 0.773 | 0.827 | 0.891 | 0.900 | 0.900 | 0.927 |
+| LLM time per question | 1.00 s | 1.66 s | 2.62 s | 3.25 s | 4.76 s | 6.66 s |
+
+Cost: 554,666 input tokens as reported by the API's `usage`, at US$0.042 per million, **US$0.023 for the whole experiment, US$0.17 per 1,000 questions**; 49,140 output tokens, not billed. The pre-run estimate (4 characters per token) was 536,000. The Jev latency is the wall time of one HTTPS request from the laptop, network included (p90 290 ms).
+
+Read plainly:
+- **Jev alone does the reranker's job here, 27 times faster.** It matches or beats the 7B LLM on every retrieval metric, though the gains are inside noise (the Recall@1 interval touches zero; two questions out of 110). It puts the gold chunk first in 101 of the 102 questions where the gold chunk is in reach (the LLM: 99). Both of its extra wins are cases where the LLM picked the right document but its first chunk instead of the one that states the fact. Its one miss in reach is instructive: for "the entry-level air-quality sensor" it scored all four entry-level warranty chunks between 0.77 and 0.83. It matched the tier but not the product line behind "air-quality", a paraphrase hop.
+- **The scores are calibrated, not just well ordered.** Gold chunks have a median noul of 0.97 and every other candidate 0.02; 3 of 2,098 non-gold candidates score above 0.7. On the 25 unanswerable questions no candidate scores above 0.7 (median of the maximum: 0.03), which suggests a retrieval-side "I don't know" gate. That gate was not built or measured here.
+- **Fusing Jev with the hybrid ranking by RRF hurt, the opposite of the earlier internal result.** It is still far better than no reranking, but it gives back most of Jev's gain (Recall@1 0.654 against 0.918). RRF gives the fused order the same vote as Jev, and on this corpus the fused order is exactly what fails: it finds the right family but not the right sibling (Recall@1 0.564). Averaging re-ranks the siblings Jev had pushed down. Fusion is a hedge for when the first stage already ranks well and the reranker is noisy; neither is true here. k = 60 was kept, not tuned.
+- **The cascade keeps 0.900 and cuts LLM time by 61%, but it is dominated.** At the pre-registered N = 8 its retrieval metrics equal the reference to the third decimal, at 2.9 s instead of 6.66 s. The sweep shows why: Jev already has the gold chunk in its top 3 for 91.8% of questions, against 77.3% for the fused order, so even N = 3 keeps 0.900 at 1.0 s of LLM time. But Jev alone is at least as good and more than 10 times faster than the cascade, so on this data the LLM adds latency, not accuracy.
+- **Answers follow retrieval, with one caution.** Jev's ranking gives 87.3% exact-fact accuracy against 85.5% for the LLM's, inside noise. The cascade's 88.2% comes with retrieval metrics identical to the reference. Its gain therefore comes from which non-gold chunks fill the other context slots, not from better retrieval, and its interval touches zero. I read it as generator sensitivity, not as a cascade effect. New generations for the Jev variants: 210, about 12 minutes; the reference answers were replayed from the cache.
+- **Process note.** Two of the 135 Jev requests were sent by a smoke test before the main run, when the key file had appeared without my having re-checked for it; they are part of the same cache and of the totals above (US$0.0004).
+
 ### Latency (medians per question, `results/latency.json`)
 
 | stage | median |
@@ -132,7 +175,7 @@ Retrieval without the reranker is effectively free at this corpus size (the sub-
 
 ## How to run
 
-Requirements: Python 3.11+ (developed on 3.14.8) with numpy and requests; an Ollama server with `qwen2.5:7b` for reranking and generation. The test suite needs neither Ollama nor network.
+Requirements: Python 3.11+ (developed on 3.14.8) with numpy and requests; an Ollama server with `qwen2.5:7b` for reranking and generation; a TypeSafe API key only for `jev-eval`. The test suite needs neither Ollama nor network.
 
 ```bash
 # offline tests (mocked LLM and embedders, under a second)
@@ -157,7 +200,14 @@ python3 -m hybridrag --index-dir index/no_title --results-dir results/ablation_n
 
 # with a real embedding model, if your server has one
 python3 -m hybridrag index --embedder ollama --embed-model nomic-embed-text
+
+# Jev (TypeSafe) reranking experiment, on top of the reference run and its LLM cache
+# key: JEV_API_KEY in the environment, or a JEV_API_KEY=... line in .env.jev (git-ignored)
+python3 -m hybridrag jev-eval --no-answers           # retrieval, latency, cost: results/jev/
+python3 -m hybridrag jev-eval                        # also answers for the Jev variants
 ```
+
+`jev-eval` estimates the Jev spend before sending anything and refuses to start, or stops, past `[jev].max_usd` (US$1 by default). Every Jev response is cached in the same sqlite3 file as the LLM calls, so a rerun needs no key and no network.
 
 Every LLM call goes through a sqlite3 cache (`.cache/llm.sqlite`) keyed on the full request, so a rerun of `eval` reproduces the reference answers in about a minute; delete the cache for an uncached run. Models, depths, thresholds and the embedder live in `config.toml`.
 
@@ -169,13 +219,14 @@ Every LLM call goes through a sqlite3 cache (`.cache/llm.sqlite`) keyed on the f
 - **One model does everything.** `qwen2.5:7b` reranks and generates. The reranker rubric, the answer prompt and the verifier thresholds were written before the run, but by the same person who wrote the questions, and the verifier was changed once after reading the first run's flags (both versions are reported).
 - **The fact matcher is simple.** A gold fact is present when all its figures and content words appear in the answer; it is order-blind and negation-blind, and it would accept a correct number stated for the wrong reason.
 - **The verifier is lexical.** It checks that figures and words of a sentence exist in the cited chunk, not that the sentence means what the chunk says, and it cannot see wrong-entity answers that cite the wrong entity's chunk faithfully.
+- **The Jev comparison is one corpus and one question wording.** The noul question and its criteria were written once, before any Jev score, and not tuned; the competing LLM is a local 7B model, not a frontier one; Jev's two-question edge over it is inside noise. Jev's latency includes the network round trip from one laptop, and the cascade's LLM latency is replayed from the reference measurements.
 - **Latency is one laptop.** Medians from one run on an Apple M5 with 16 GB of RAM, with other processes sharing the Ollama server; treat them as observed, not as a benchmark. Determinism (temperature 0, fixed seed) is per machine; the sqlite3 cache is what makes a rerun exact.
 
 ## Next steps
 
 - Swap LSA for a dedicated embedding model through the existing `Embedder` interface and rerun the same ablation; that is the experiment that tests whether hybrid fusion earns its place.
 - Raise first-stage recall for paraphrases (query rewriting into document vocabulary, or a larger fused candidate pool) and measure the reranker ceiling again.
-- Cheaper reranking: grade the top 10 instead of 20 (the gold chunk was at fused rank 11 to 20 for some paraphrases, so measure the trade), batch passages per call, or a smaller cross-encoder.
+- Cheaper reranking: measured with Jev above (one request scores the 20 candidates in 0.25 s). Still open: a gate that answers "I don't know" when no candidate's noul passes a threshold, measured against the generator's own refusals, and Jev on a corpus where the first stage is strong, which is where RRF fusion could still pay.
 - Let the verifier repair a citation (re-point a sentence to the context chunk that contains its figures) instead of removing a correct sentence, and report repairs separately from removals.
 - A human-written question set over a less templated corpus, and a second annotator for the gold facts.
 
@@ -183,13 +234,15 @@ Every LLM call goes through a sqlite3 cache (`.cache/llm.sqlite`) keyed on the f
 
 ```
 hybridrag/
-  cli.py            python -m hybridrag <synth|index|retrieve|answer|eval|run-all>
+  cli.py            python -m hybridrag <synth|index|retrieve|answer|eval|run-all|jev-eval>
   synth.py          seeded fictional corpus (96 docs) and gold questions (135)
   chunking.py       section-aware chunker with title header; gold chunk ids
   bm25.py           Okapi BM25 in numpy
   dense.py          Embedder interface; LSA, Ollama and OpenAI-compatible embedders; numpy vector index
   fusion.py         Reciprocal Rank Fusion
   rerank.py         pointwise LLM grader (fixed rubric, logprob-weighted grade)
+  jev.py            Jev (TypeSafe) client (urllib), noul request per question, cache, budget cap
+  jev_eval.py       Jev reranking experiment: Jev alone, Jev fused by RRF, Jev-pruned LLM cascade
   generate.py       answer prompt with chunk-id citations
   verify.py         deterministic citation verifier
   metrics.py        Recall@k, MRR, nDCG, contamination, fact match, bootstrap CIs

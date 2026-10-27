@@ -46,6 +46,21 @@ max_tokens = 200
 min_claim_words = 4
 min_overlap = 0.5
 
+[jev]
+# Jev (TypeSafe) reranking experiment: `python -m hybridrag jev-eval`. Key from
+# JEV_API_KEY or a JEV_API_KEY=... line in .env.jev (git-ignored); never logged.
+model = "jev-1.14.0"           # pinned version, not the moving jev-latest alias
+price_usd_per_mtok = 0.042     # input tokens; output tokens are not billed
+max_usd = 1.0                  # refuse to start, or stop, past this spend
+timeout_s = 60
+# Cascade: Jev keeps its top N of the fused 20 and the LLM grades only those.
+# Fixed at 8 before any Jev score existed: the generator reads 5 chunks, so 8
+# leaves the LLM 3 places of slack to fix a Jev mistake, and cuts LLM pairs by
+# 60%. In the fused order alone, ranks 9-20 hold the gold chunk for 4 of 110
+# questions, so a pruner no better than RRF would lose at most those.
+cascade_n = 8
+cascade_sweep = [3, 5, 8, 10, 12, 15, 20]   # sensitivity only, replayed from the LLM cache
+
 [evalgen]
 # Optional: a checkout of eval-dataset-generator. When set, `eval` and `run-all`
 # export the answers in its format, score them with its deterministic checks and

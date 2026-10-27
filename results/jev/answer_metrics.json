@@ -1,0 +1,322 @@
+{
+  "variants": {
+    "hybrid": {
+      "n_answerable": 110,
+      "n_unanswerable": 25,
+      "fact_accuracy_raw": 0.7818,
+      "fact_accuracy_raw_ci95": [
+        0.7,
+        0.8545
+      ],
+      "fact_accuracy_verified": 0.7818,
+      "fact_accuracy_verified_ci95": [
+        0.7,
+        0.8545
+      ],
+      "false_idk_raw": 0.2091,
+      "false_idk_verified": 0.2091,
+      "idk_correct_raw": 1.0,
+      "idk_correct_raw_ci95": [
+        1.0,
+        1.0
+      ],
+      "idk_correct_verified": 1.0,
+      "idk_correct_verified_ci95": [
+        1.0,
+        1.0
+      ],
+      "claim_sentences": 92,
+      "flagged_sentences": 0,
+      "verifier_flag_rate": 0.0,
+      "flagged_content_not_in_context": 0,
+      "flagged_citation_only": 0,
+      "answers_with_flag": 0.0,
+      "gold_unsupported_raw": 0.0074,
+      "gold_unsupported_verified": 0.0074,
+      "confidently_wrong_verified": 0.0091,
+      "gold_in_context": 0.8273,
+      "fact_accuracy_when_gold_in_context": 0.9451,
+      "generate_s_median": 3.093,
+      "verify_ms_median": 0.09,
+      "by_qtype": {
+        "exact_code": {
+          "n": 35,
+          "fact_accuracy_verified": 0.9714
+        },
+        "lexical": {
+          "n": 35,
+          "fact_accuracy_verified": 1.0
+        },
+        "paraphrase": {
+          "n": 40,
+          "fact_accuracy_verified": 0.425
+        }
+      }
+    },
+    "hybrid_rerank": {
+      "n_answerable": 110,
+      "n_unanswerable": 25,
+      "fact_accuracy_raw": 0.8727,
+      "fact_accuracy_raw_ci95": [
+        0.8091,
+        0.9273
+      ],
+      "fact_accuracy_verified": 0.8545,
+      "fact_accuracy_verified_ci95": [
+        0.7818,
+        0.9182
+      ],
+      "false_idk_raw": 0.1182,
+      "false_idk_verified": 0.1364,
+      "idk_correct_raw": 1.0,
+      "idk_correct_raw_ci95": [
+        1.0,
+        1.0
+      ],
+      "idk_correct_verified": 1.0,
+      "idk_correct_verified_ci95": [
+        1.0,
+        1.0
+      ],
+      "claim_sentences": 102,
+      "flagged_sentences": 2,
+      "verifier_flag_rate": 0.0196,
+      "flagged_content_not_in_context": 0,
+      "flagged_citation_only": 2,
+      "answers_with_flag": 0.0148,
+      "gold_unsupported_raw": 0.0074,
+      "gold_unsupported_verified": 0.0074,
+      "confidently_wrong_verified": 0.0091,
+      "gold_in_context": 0.9273,
+      "fact_accuracy_when_gold_in_context": 0.9216,
+      "generate_s_median": 3.404,
+      "verify_ms_median": 0.103,
+      "by_qtype": {
+        "exact_code": {
+          "n": 35,
+          "fact_accuracy_verified": 0.9714
+        },
+        "lexical": {
+          "n": 35,
+          "fact_accuracy_verified": 0.9714
+        },
+        "paraphrase": {
+          "n": 40,
+          "fact_accuracy_verified": 0.65
+        }
+      }
+    },
+    "hybrid_jev": {
+      "n_answerable": 110,
+      "n_unanswerable": 25,
+      "fact_accuracy_raw": 0.9,
+      "fact_accuracy_raw_ci95": [
+        0.8455,
+        0.9545
+      ],
+      "fact_accuracy_verified": 0.8727,
+      "fact_accuracy_verified_ci95": [
+        0.8091,
+        0.9273
+      ],
+      "false_idk_raw": 0.0909,
+      "false_idk_verified": 0.1273,
+      "idk_correct_raw": 1.0,
+      "idk_correct_raw_ci95": [
+        1.0,
+        1.0
+      ],
+      "idk_correct_verified": 1.0,
+      "idk_correct_verified_ci95": [
+        1.0,
+        1.0
+      ],
+      "claim_sentences": 104,
+      "flagged_sentences": 5,
+      "verifier_flag_rate": 0.0481,
+      "flagged_content_not_in_context": 1,
+      "flagged_citation_only": 4,
+      "answers_with_flag": 0.037,
+      "gold_unsupported_raw": 0.0074,
+      "gold_unsupported_verified": 0.0,
+      "confidently_wrong_verified": 0.0,
+      "gold_in_context": 0.9273,
+      "fact_accuracy_when_gold_in_context": 0.9412,
+      "generate_s_median": 4.13,
+      "verify_ms_median": 0.458,
+      "by_qtype": {
+        "exact_code": {
+          "n": 35,
+          "fact_accuracy_verified": 0.9143
+        },
+        "lexical": {
+          "n": 35,
+          "fact_accuracy_verified": 1.0
+        },
+        "paraphrase": {
+          "n": 40,
+          "fact_accuracy_verified": 0.725
+        }
+      }
+    },
+    "hybrid_jev_rrf": {
+      "n_answerable": 110,
+      "n_unanswerable": 25,
+      "fact_accuracy_raw": 0.8818,
+      "fact_accuracy_raw_ci95": [
+        0.8182,
+        0.9364
+      ],
+      "fact_accuracy_verified": 0.8545,
+      "fact_accuracy_verified_ci95": [
+        0.7818,
+        0.9182
+      ],
+      "false_idk_raw": 0.1091,
+      "false_idk_verified": 0.1455,
+      "idk_correct_raw": 1.0,
+      "idk_correct_raw_ci95": [
+        1.0,
+        1.0
+      ],
+      "idk_correct_verified": 1.0,
+      "idk_correct_verified_ci95": [
+        1.0,
+        1.0
+      ],
+      "claim_sentences": 101,
+      "flagged_sentences": 4,
+      "verifier_flag_rate": 0.0396,
+      "flagged_content_not_in_context": 1,
+      "flagged_citation_only": 3,
+      "answers_with_flag": 0.0296,
+      "gold_unsupported_raw": 0.0074,
+      "gold_unsupported_verified": 0.0,
+      "confidently_wrong_verified": 0.0,
+      "gold_in_context": 0.9,
+      "fact_accuracy_when_gold_in_context": 0.9495,
+      "generate_s_median": 3.382,
+      "verify_ms_median": 0.367,
+      "by_qtype": {
+        "exact_code": {
+          "n": 35,
+          "fact_accuracy_verified": 0.9429
+        },
+        "lexical": {
+          "n": 35,
+          "fact_accuracy_verified": 1.0
+        },
+        "paraphrase": {
+          "n": 40,
+          "fact_accuracy_verified": 0.65
+        }
+      }
+    },
+    "hybrid_jev_llm": {
+      "n_answerable": 110,
+      "n_unanswerable": 25,
+      "fact_accuracy_raw": 0.8909,
+      "fact_accuracy_raw_ci95": [
+        0.8273,
+        0.9455
+      ],
+      "fact_accuracy_verified": 0.8818,
+      "fact_accuracy_verified_ci95": [
+        0.8182,
+        0.9364
+      ],
+      "false_idk_raw": 0.1091,
+      "false_idk_verified": 0.1182,
+      "idk_correct_raw": 1.0,
+      "idk_correct_raw_ci95": [
+        1.0,
+        1.0
+      ],
+      "idk_correct_verified": 1.0,
+      "idk_correct_verified_ci95": [
+        1.0,
+        1.0
+      ],
+      "claim_sentences": 104,
+      "flagged_sentences": 2,
+      "verifier_flag_rate": 0.0192,
+      "flagged_content_not_in_context": 0,
+      "flagged_citation_only": 2,
+      "answers_with_flag": 0.0148,
+      "gold_unsupported_raw": 0.0,
+      "gold_unsupported_verified": 0.0,
+      "confidently_wrong_verified": 0.0,
+      "gold_in_context": 0.9273,
+      "fact_accuracy_when_gold_in_context": 0.951,
+      "generate_s_median": 3.382,
+      "verify_ms_median": 0.219,
+      "by_qtype": {
+        "exact_code": {
+          "n": 35,
+          "fact_accuracy_verified": 0.9714
+        },
+        "lexical": {
+          "n": 35,
+          "fact_accuracy_verified": 1.0
+        },
+        "paraphrase": {
+          "n": 40,
+          "fact_accuracy_verified": 0.7
+        }
+      }
+    }
+  },
+  "comparisons": {
+    "hybrid_jev_vs_hybrid": {
+      "fact_accuracy_verified": {
+        "delta": 0.0909,
+        "ci95": [
+          0.0273,
+          0.1636
+        ],
+        "excludes_zero": true
+      }
+    },
+    "hybrid_jev_vs_hybrid_rerank": {
+      "fact_accuracy_verified": {
+        "delta": 0.0182,
+        "ci95": [
+          -0.0273,
+          0.0727
+        ],
+        "excludes_zero": false
+      }
+    },
+    "hybrid_jev_rrf_vs_hybrid_rerank": {
+      "fact_accuracy_verified": {
+        "delta": 0.0,
+        "ci95": [
+          -0.0545,
+          0.0545
+        ],
+        "excludes_zero": false
+      }
+    },
+    "hybrid_jev_llm_vs_hybrid_rerank": {
+      "fact_accuracy_verified": {
+        "delta": 0.0273,
+        "ci95": [
+          0.0,
+          0.0636
+        ],
+        "excludes_zero": false
+      }
+    },
+    "hybrid_jev_llm_vs_hybrid": {
+      "fact_accuracy_verified": {
+        "delta": 0.1,
+        "ci95": [
+          0.0455,
+          0.1636
+        ],
+        "excludes_zero": true
+      }
+    }
+  },
+  "skipped": {}
+}

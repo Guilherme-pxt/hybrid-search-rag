@@ -1,0 +1,20 @@
+{
+  "price_usd_per_mtok_input": 0.042,
+  "output_billed": false,
+  "requests": 135,
+  "pairs_scored": 2700,
+  "input_tokens": 554666,
+  "output_tokens": 49140,
+  "token_source": "usage.input_tokens / usage.output_tokens as reported by the API",
+  "cost_usd": 0.023296,
+  "cost_usd_per_question": 0.00017256,
+  "cost_usd_per_1000_questions": 0.1726,
+  "estimated_input_tokens_before_run": 0,
+  "billed_this_process_usd": 0.0,
+  "cache_hits": 135,
+  "cache_misses": 0,
+  "retries": 0,
+  "models": [
+    "jev-1.14.0"
+  ]
+}

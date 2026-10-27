@@ -1,0 +1,10 @@
+{
+  "jev_request_ms": 247.551,
+  "jev_request_ms_p90": 290.316,
+  "rerank_llm_ms_20_pairs": 6664.833,
+  "cascade_llm_ms": 2620.714,
+  "cascade_total_ms": 2896.058,
+  "cascade_n": 8,
+  "jev_candidates": 20,
+  "jev_requests_uncached_this_run": 0
+}

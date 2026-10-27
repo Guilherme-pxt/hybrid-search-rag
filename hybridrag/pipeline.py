@@ -193,14 +193,15 @@ def _gold(questions: list[dict], retr: Retriever) -> dict[str, set[str]]:
     return {q["qid"]: set(gold_chunk_ids(q, by_doc)) for q in questions}
 
 
-def retrieval_metrics(per_q: list[dict], questions: list[dict], gold: dict[str, set[str]]) -> dict:
+def retrieval_metrics(per_q: list[dict], questions: list[dict], gold: dict[str, set[str]],
+                      variants=VARIANTS, comparisons=COMPARISONS) -> dict:
     qmap = {q["qid"]: q for q in questions}
-    rows: dict[str, list[dict]] = {v: [] for v in VARIANTS}
+    rows: dict[str, list[dict]] = {v: [] for v in variants}
     for rec in per_q:
         q = qmap[rec["qid"]]
         if q["qtype"] == "unanswerable":
             continue
-        for v in VARIANTS:
+        for v in variants:
             if v in rec["ranked"]:
                 row = retrieval_row(rec["ranked"][v], gold[q["qid"]], set(q["distractor_doc_ids"]))
                 row["qid"], row["qtype"] = q["qid"], q["qtype"]
@@ -223,7 +224,7 @@ def retrieval_metrics(per_q: list[dict], questions: list[dict], gold: dict[str, 
                            "mrr@10": r4(mean([r["mrr@10"] for r in sub])),
                            "contam@5": r4(mean([r["contam@5"] for r in sub if "contam@5" in r]))}
         summary["by_qtype"][v] = by_t
-    for a, b in COMPARISONS:
+    for a, b in comparisons:
         if a in summary["variants"] and b in summary["variants"]:
             ra = {r["qid"]: r for r in rows[a]}
             rb = {r["qid"]: r for r in rows[b]}
