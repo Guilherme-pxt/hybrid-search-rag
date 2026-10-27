@@ -1,0 +1,12 @@
+[project]
+name = "hybridrag"
+version = "0.1.0"
+description = "Hybrid search RAG (BM25 + dense + RRF + LLM rerank + citation verifier) with a measured ablation."
+readme = "README.md"
+license = "MIT"
+authors = [{ name = "Guilherme Lucena Peixoto" }]
+requires-python = ">=3.11"
+dependencies = ["numpy", "requests"]
+
+[project.scripts]
+hybridrag = "hybridrag.cli:main"

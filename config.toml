@@ -1,0 +1,54 @@
+# Default configuration for `python -m hybridrag`. Flags override the common values;
+# see `python -m hybridrag <command> --help`.
+
+[run]
+seed = 42
+data_dir = "data"              # synthetic corpus and gold questions (committed)
+index_dir = "index"            # chunks, vectors and embedder state (rebuilt by `index`)
+results_dir = "results"        # metrics, per-question records, report.md (committed)
+cache = ".cache/llm.sqlite"    # sqlite3 cache of every LLM call
+
+[chunking]
+max_words = 50
+
+[embedder]
+# "lsa" (numpy, fitted on the corpus) | "ollama" | "openai_compatible"
+# The reference run uses "lsa": the local Ollama refuses /api/embed for every
+# installed model. With an embedding model available, for example:
+#   kind = "ollama"
+#   model = "nomic-embed-text"
+#   query_prefix = "search_query: "
+#   passage_prefix = "search_document: "
+kind = "lsa"
+dims = 128
+
+[retrieval]
+candidates = 50        # depth of each retriever's list fed to RRF
+rrf_k = 60             # Cormack et al. 2009
+rerank_top_n = 20      # fused candidates graded by the LLM
+final_k = 5            # chunks given to the generator
+
+[llm]
+provider = "ollama"    # or "openai_compatible" (HYBRIDRAG_OPENAI_BASE_URL / HYBRIDRAG_OPENAI_API_KEY)
+base_url = "http://localhost:11434"
+model = "qwen2.5:7b"   # reranker and generator
+temperature = 0.0
+seed = 42
+num_ctx = 4096
+timeout_s = 300
+
+[answer]
+variants = ["bm25", "dense", "hybrid", "hybrid_rerank"]
+max_tokens = 200
+
+[verifier]
+min_claim_words = 4
+min_overlap = 0.5
+
+[evalgen]
+# Optional: a checkout of eval-dataset-generator. When set, `eval` and `run-all`
+# export the answers in its format, score them with its deterministic checks and
+# run its gate CLI. Empty = skip. Also settable with HYBRIDRAG_EVALGEN_PATH.
+path = ""
+baseline = "hybrid"
+candidates = ["hybrid_rerank", "bm25"]
