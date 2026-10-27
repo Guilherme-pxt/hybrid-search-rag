@@ -85,7 +85,7 @@ def step_synth(cfg: dict, log=print) -> dict:
 
 def step_index(cfg: dict, log=print) -> dict:
     docs = read_jsonl(Path(cfg["run"]["data_dir"]) / "corpus.jsonl")
-    chunks = chunk_corpus(docs, int(cfg["chunking"]["max_words"]))
+    chunks = chunk_corpus(docs, int(cfg["chunking"]["max_words"]), bool(cfg["chunking"].get("title_header", True)))
     emb = build_embedder(cfg["embedder"])
     texts = [c.text for c in chunks]
     t0 = time.perf_counter()
@@ -98,7 +98,8 @@ def step_index(cfg: dict, log=print) -> dict:
     VectorIndex(vecs).save(out / "vectors.npy")
     if isinstance(emb, LSAEmbedder):
         emb.save(out / "embedder")
-    meta = {"embedder": emb.name, "embedder_cfg": cfg["embedder"], "documents": len(docs), "chunks": len(chunks),
+    meta = {"embedder": emb.name, "embedder_cfg": cfg["embedder"], "chunking": cfg["chunking"],
+            "documents": len(docs), "chunks": len(chunks),
             "dims": int(vecs.shape[1]), "embed_s": round(embed_s, 3),
             "words_per_chunk_median": statistics.median(len(c.text.split()) for c in chunks)}
     write_json(out / "meta.json", meta)
@@ -236,10 +237,10 @@ def retrieval_metrics(per_q: list[dict], questions: list[dict], gold: dict[str, 
 
 
 def answer_record(q: dict, variant: str, passages: list[tuple[str, str]], ans, vcfg: dict,
-                  doc_text: dict[str, str]) -> dict:
+                  doc_text: dict[str, str], gold: set[str] | None = None) -> dict:
     t0 = time.perf_counter()
     ver = verify(ans.text, dict(passages), remove=True, min_claim_words=int(vcfg["min_claim_words"]),
-                 min_overlap=float(vcfg["min_overlap"]))
+                 min_overlap=float(vcfg["min_overlap"]), question=q["question"])
     verify_ms = (time.perf_counter() - t0) * 1000
     allowed = q["question"] + "\n" + (doc_text.get(q["gold_doc_id"], "") if q["gold_doc_id"] else "")
     raw, final = ans.text, ver.final_text
@@ -249,7 +250,8 @@ def answer_record(q: dict, variant: str, passages: list[tuple[str, str]], ans, v
         "answer_raw": raw, "answer_verified": final, "caveat": ver.caveat,
         "idk_raw": is_idk(raw), "idk_verified": is_idk(final),
         "claims": ver.claims, "flagged": ver.flagged,
-        "flags": [{"sentence": s.text, "reasons": s.reasons} for s in ver.sentences if not s.supported],
+        "flags": [{"sentence": s.text, "reasons": s.reasons, "content_in_context": s.in_context}
+                  for s in ver.sentences if not s.supported],
         "unsupported_figures_raw": unsupported_figures(raw, allowed),
         "unsupported_figures_verified": unsupported_figures(final, allowed),
         "generate_s": round(ans.latency_s, 3), "generate_cached": ans.cached, "verify_ms": round(verify_ms, 3),
@@ -257,6 +259,7 @@ def answer_record(q: dict, variant: str, passages: list[tuple[str, str]], ans, v
     if q["gold_fact"] is not None:
         rec["fact_raw"] = fact_present(q["gold_fact"], raw)
         rec["fact_verified"] = fact_present(q["gold_fact"], final)
+        rec["gold_in_context"] = bool(set(ans.context_ids) & (gold or set()))
     return rec
 
 
@@ -281,9 +284,18 @@ def answer_metrics(recs: list[dict]) -> dict:
         "idk_correct_verified": rate(una, "idk_verified"), "idk_correct_verified_ci95": ci(una, "idk_verified"),
         "claim_sentences": claims, "flagged_sentences": flagged,
         "verifier_flag_rate": r4(flagged / claims) if claims else None,
+        # flagged sentences whose content is nowhere in the 5 passages vs found in a passage other than the cited one
+        "flagged_content_not_in_context": sum(1 for r in recs for f in r["flags"] if f.get("content_in_context") is False),
+        "flagged_citation_only": sum(1 for r in recs for f in r["flags"] if f.get("content_in_context")),
         "answers_with_flag": r4(mean([1.0 if r["flagged"] else 0.0 for r in recs])),
         "gold_unsupported_raw": r4(mean([1.0 if r["unsupported_figures_raw"] else 0.0 for r in recs])),
         "gold_unsupported_verified": r4(mean([1.0 if r["unsupported_figures_verified"] else 0.0 for r in recs])),
+        # answerable questions answered with something other than "I don't know" and without the gold fact
+        "confidently_wrong_verified": r4(mean([1.0 if (not r["idk_verified"] and not r["fact_verified"]) else 0.0
+                                               for r in ans])),
+        "gold_in_context": r4(mean([1.0 if r.get("gold_in_context") else 0.0 for r in ans])),
+        "fact_accuracy_when_gold_in_context": r4(mean([1.0 if r["fact_verified"] else 0.0 for r in ans
+                                                       if r.get("gold_in_context")])),
         "generate_s_median": r4(statistics.median(r["generate_s"] for r in recs)),
         "verify_ms_median": r4(statistics.median(r["verify_ms"] for r in recs)),
     }
@@ -314,7 +326,8 @@ def probe_ollama_embed(base_url: str, model: str) -> dict:
 
 
 def step_eval(cfg: dict, provider, log=print, answer_variants: list[str] | None = None,
-              limit: int | None = None) -> dict:
+              limit: int | None = None, rerank: bool = True) -> dict:
+    """``rerank=False`` evaluates the first-stage variants only (no LLM call at all)."""
     res_dir = Path(cfg["run"]["results_dir"])
     res_dir.mkdir(parents=True, exist_ok=True)
     questions = read_jsonl(Path(cfg["run"]["data_dir"]) / "questions.jsonl")
@@ -325,7 +338,8 @@ def step_eval(cfg: dict, provider, log=print, answer_variants: list[str] | None 
     retr = Retriever(cfg)
     gold = _gold(questions, retr)
     model = cfg["llm"]["model"]
-    reranker = LLMReranker(provider, model)
+    reranker = LLMReranker(provider, model) if rerank else None
+    variants_eval = VARIANTS if rerank else VARIANTS[:3]
     timing = {}
 
     # 1. retrieval, every variant from the same first-stage lists
@@ -333,17 +347,28 @@ def step_eval(cfg: dict, provider, log=print, answer_variants: list[str] | None 
     per_q, results = [], {}
     for i, q in enumerate(questions, 1):
         r = retr.first_stage(q["question"])
-        retr.add_rerank(q["question"], r, reranker)
+        if reranker is not None:
+            retr.add_rerank(q["question"], r, reranker)
         results[q["qid"]] = r
         per_q.append({"qid": q["qid"], "qtype": q["qtype"], "gold_chunk_ids": sorted(gold[q["qid"]]),
-                      "ranked": {v: r.ranked[v][:10] for v in VARIANTS}, "rerank": r.rerank,
+                      "ranked": {v: r.ranked[v][:10] for v in variants_eval}, "rerank": r.rerank,
+                      "gold_rank_fused": next((i for i, c in enumerate(r.ranked["hybrid"], 1) if c in gold[q["qid"]]), None),
                       "timings_ms": {k: round(v, 3) for k, v in r.timings_ms.items()}})
         if i % 20 == 0 or i == len(questions):
-            log(f"  retrieval + rerank: {i}/{len(questions)} ({time.perf_counter() - t0:.0f}s)")
+            log(f"  retrieval{' + rerank' if reranker else ''}: {i}/{len(questions)} ({time.perf_counter() - t0:.0f}s)")
     timing["retrieval_and_rerank_s"] = round(time.perf_counter() - t0, 1)
     write_jsonl(res_dir / "retrieval_per_question.jsonl", per_q)
     rmetrics = retrieval_metrics(per_q, questions, gold)
-    rmetrics["reranker_unparseable"] = reranker.unparseable
+    rmetrics["reranker_unparseable"] = reranker.unparseable if reranker else None
+    # the reranker only reorders the fused top N: a gold chunk below N is out of its reach
+    ceiling = {}
+    for t in ("all", "exact_code", "lexical", "paraphrase"):
+        sub = [p for p in per_q if p["qtype"] != "unanswerable" and (t == "all" or p["qtype"] == t)]
+        if sub:
+            ceiling[t] = r4(mean([1.0 if p["gold_rank_fused"] and p["gold_rank_fused"] <= retr.top_n else 0.0
+                                  for p in sub]))
+    rmetrics[f"gold_in_fused_top{retr.top_n}"] = ceiling
+    rmetrics["index"] = retr.meta
     write_json(res_dir / "retrieval_metrics.json", rmetrics)
     log("retrieval: " + "; ".join(f"{v} R@5={s['recall@5']} MRR={s['mrr@10']} contam@5={s['contam@5']}"
                                   for v, s in rmetrics["variants"].items()))
@@ -351,6 +376,7 @@ def step_eval(cfg: dict, provider, log=print, answer_variants: list[str] | None 
     # 2. answers + verifier for the configured variants
     t0 = time.perf_counter()
     variants = answer_variants if answer_variants is not None else list(cfg["answer"]["variants"])
+    variants = [v for v in variants if v in variants_eval] if provider is not None else []
     ametrics, all_recs = {}, {}
     for v in variants:
         recs = []
@@ -358,7 +384,7 @@ def step_eval(cfg: dict, provider, log=print, answer_variants: list[str] | None 
         for i, q in enumerate(questions, 1):
             passages = retr.passages(results[q["qid"]].ranked[v])
             ans = generate_answer(provider, model, q["question"], passages, int(cfg["answer"]["max_tokens"]))
-            recs.append(answer_record(q, v, passages, ans, cfg["verifier"], doc_text))
+            recs.append(answer_record(q, v, passages, ans, cfg["verifier"], doc_text, gold[q["qid"]]))
             if i % 45 == 0 or i == len(questions):
                 log(f"  answers {v}: {i}/{len(questions)} ({time.perf_counter() - t1:.0f}s)")
         write_jsonl(res_dir / f"answers_{v}.jsonl", recs)
@@ -377,17 +403,19 @@ def step_eval(cfg: dict, provider, log=print, answer_variants: list[str] | None 
             d = paired_bootstrap([float(r["fact_verified"]) for r in ans_a], [float(r["fact_verified"]) for r in ans_b])
             comps[f"{b}_vs_{a}"] = {"fact_accuracy_verified": {"delta": r4(d["delta"]), "ci95": [r4(x) for x in d["ci95"]],
                                                                "excludes_zero": d["excludes_zero"]}}
-    write_json(res_dir / "answer_metrics.json", {"variants": ametrics, "comparisons": comps})
+    if ametrics:
+        write_json(res_dir / "answer_metrics.json", {"variants": ametrics, "comparisons": comps})
 
     # 3. latency per stage (medians over questions; LLM latencies are the uncached measurements)
     def med(key):
         return r4(statistics.median(p["timings_ms"][key] for p in per_q))
 
     lat = {"bm25_ms": med("bm25"), "dense_query_embed_ms": med("dense_embed"), "dense_search_ms": med("dense_search"),
-           "rrf_ms": med("rrf"), "rerank_llm_ms_per_question": med("rerank_llm"),
-           "rerank_pairs_per_question": retr.top_n,
-           "rerank_llm_ms_per_pair": r4(statistics.median(p["timings_ms"]["rerank_llm"] / max(len(p["rerank"]), 1)
-                                                         for p in per_q))}
+           "rrf_ms": med("rrf")}
+    if reranker is not None:
+        lat.update({"rerank_llm_ms_per_question": med("rerank_llm"), "rerank_pairs_per_question": retr.top_n,
+                    "rerank_llm_ms_per_pair": r4(statistics.median(p["timings_ms"]["rerank_llm"] / max(len(p["rerank"]), 1)
+                                                                  for p in per_q))})
     for v, m in ametrics.items():
         lat[f"generate_ms_{v}"] = r4(m["generate_s_median"] * 1000)
         lat[f"verify_ms_{v}"] = m["verify_ms_median"]

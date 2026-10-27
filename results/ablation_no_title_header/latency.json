@@ -1,0 +1,6 @@
+{
+  "bm25_ms": 0.044,
+  "dense_query_embed_ms": 0.042,
+  "dense_search_ms": 0.025,
+  "rrf_ms": 0.027
+}

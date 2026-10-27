@@ -1,0 +1,74 @@
+{
+  "verdict": "PASS",
+  "reasons": [],
+  "metric": "det_score",
+  "items": 135,
+  "baseline_mean": 0.8222,
+  "candidate_mean": 0.8074,
+  "delta": -0.0148,
+  "delta_ci95": [
+    -0.0444,
+    0.0076
+  ],
+  "new_failures": [
+    "q016",
+    "q025",
+    "q087"
+  ],
+  "fixed": [
+    "q063"
+  ],
+  "per_cluster": [
+    {
+      "cluster_id": 0,
+      "label": "exact_code",
+      "n": 35,
+      "baseline": 0.9714,
+      "candidate": 0.9714,
+      "delta": 0.0,
+      "gated": true,
+      "regressed": false
+    },
+    {
+      "cluster_id": 1,
+      "label": "lexical",
+      "n": 35,
+      "baseline": 1.0,
+      "candidate": 1.0,
+      "delta": 0.0,
+      "gated": true,
+      "regressed": false
+    },
+    {
+      "cluster_id": 2,
+      "label": "paraphrase",
+      "n": 40,
+      "baseline": 0.425,
+      "candidate": 0.375,
+      "delta": -0.05,
+      "gated": true,
+      "regressed": false
+    },
+    {
+      "cluster_id": 3,
+      "label": "unanswerable",
+      "n": 25,
+      "baseline": 1.0,
+      "candidate": 1.0,
+      "delta": 0.0,
+      "gated": true,
+      "regressed": false
+    }
+  ],
+  "config": {
+    "metric": "det_score",
+    "max_overall_drop": 0.05,
+    "max_cluster_drop": 0.15,
+    "min_cluster_items": 3,
+    "max_new_failures": 3,
+    "bootstrap_samples": 2000,
+    "seed": 42
+  },
+  "baseline": "hybrid",
+  "candidate": "bm25"
+}

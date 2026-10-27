@@ -10,6 +10,7 @@ cache = ".cache/llm.sqlite"    # sqlite3 cache of every LLM call
 
 [chunking]
 max_words = 50
+title_header = true   # prefix every chunk with its document title
 
 [embedder]
 # "lsa" (numpy, fitted on the corpus) | "ollama" | "openai_compatible"

@@ -55,7 +55,7 @@ def _pieces(heading: str, body: str, max_words: int) -> list[str]:
     return pieces
 
 
-def chunk_document(doc: dict, max_words: int = 50) -> list[Chunk]:
+def chunk_document(doc: dict, max_words: int = 50, title_header: bool = True) -> list[Chunk]:
     pieces: list[str] = []
     for heading, body in _sections(doc["text"]):
         pieces.extend(_pieces(heading, body, max_words))
@@ -67,15 +67,15 @@ def chunk_document(doc: dict, max_words: int = 50) -> list[Chunk]:
         cur.append(p)
     if cur:
         chunks.append(cur)
-    return [Chunk(f"{doc['doc_id']}#{i}", doc["doc_id"], doc["title"], doc.get("family", ""),
-                  f"{doc['title']}\n" + "\n".join(c))
+    head = f"{doc['title']}\n" if title_header else ""
+    return [Chunk(f"{doc['doc_id']}#{i}", doc["doc_id"], doc["title"], doc.get("family", ""), head + "\n".join(c))
             for i, c in enumerate(chunks)]
 
 
-def chunk_corpus(docs: list[dict], max_words: int = 50) -> list[Chunk]:
+def chunk_corpus(docs: list[dict], max_words: int = 50, title_header: bool = True) -> list[Chunk]:
     out: list[Chunk] = []
     for d in docs:
-        out.extend(chunk_document(d, max_words))
+        out.extend(chunk_document(d, max_words, title_header))
     return out
 
 

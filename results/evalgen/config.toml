@@ -1,0 +1,10 @@
+[run]
+seed = 42
+data_dir = "data"
+
+[gate]
+metric = "det_score"
+max_overall_drop = 0.05
+max_cluster_drop = 0.15
+min_cluster_items = 3
+max_new_failures = 3

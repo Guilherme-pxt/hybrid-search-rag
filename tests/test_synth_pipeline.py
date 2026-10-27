@@ -1,3 +1,5 @@
+import contextlib
+import io
 import json
 import re
 import tempfile
@@ -129,11 +131,15 @@ class PipelineTests(unittest.TestCase):
             text = text.replace('data_dir = "data"', f'data_dir = "{d}/data"').replace(
                 'index_dir = "index"', f'index_dir = "{d}/index"')
             cfg_path.write_text(text)
-            self.assertEqual(cli_main(["--config", str(cfg_path), "synth"]), 0)
-            self.assertEqual(cli_main(["--config", str(cfg_path), "index"]), 0)
+            with contextlib.redirect_stdout(io.StringIO()):
+                self.assertEqual(cli_main(["--config", str(cfg_path), "synth"]), 0)
+                self.assertEqual(cli_main(["--config", str(cfg_path), "index"]), 0)
             meta = json.loads(Path(d, "index", "meta.json").read_text())
             self.assertEqual(meta["embedder"], "lsa-128")
-            self.assertEqual(cli_main(["--config", str(cfg_path), "retrieve", "QV-PU200 battery", "--variant", "bm25"]), 0)
+            buf = io.StringIO()
+            with contextlib.redirect_stdout(buf):
+                self.assertEqual(cli_main(["--config", str(cfg_path), "retrieve", "QV-PU200 battery", "--variant", "bm25"]), 0)
+            self.assertIn("[spec-pulse-pro#", buf.getvalue().splitlines()[0])
 
 
 if __name__ == "__main__":

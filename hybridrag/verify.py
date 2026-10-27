@@ -8,12 +8,17 @@ No model is involved, so every verdict can be reproduced by hand:
    (at least ``min_claim_words`` content words). The "I don't know" sentence
    and short connective sentences are exempt.
 2. A sentence that needs support is supported when
-   - it cites at least one chunk id, and every cited id was in the context
-     given to the generator (an invented id is a failure), and
-   - every figure in the sentence appears in the text of the cited chunks, and
+   - it cites at least one chunk id, or a later sentence of the answer does
+     (a citation at the end of a paragraph covers the sentences before it),
+     and every cited id was in the context given to the generator (an
+     invented id is a failure), and
+   - every figure in the sentence appears in the text of the cited chunks or
+     in the question (restating "QV-PU200" from the question is not a claim), and
    - for sentences without figures, at least ``min_overlap`` of its content
      words appear in the cited chunks.
-3. Unsupported sentences are flagged. With ``remove=True`` they are dropped
+3. Unsupported sentences are flagged, and each flag records whether its
+   content exists anywhere in the context (a citation problem) or nowhere
+   (content the model added). With ``remove=True`` they are dropped
    and a caveat is appended; if nothing supported is left, the answer becomes
    the "I don't know" reply.
 
@@ -37,6 +42,8 @@ class SentenceCheck:
     needs_support: bool
     supported: bool
     reasons: list[str] = field(default_factory=list)
+    inherited: list[str] = field(default_factory=list)
+    in_context: bool | None = None  # for flagged sentences: is the content anywhere in the context?
 
 
 @dataclass
@@ -57,37 +64,54 @@ class Verification:
         return asdict(self)
 
 
-def check_sentence(sentence: str, chunk_text: dict[str, str], min_claim_words: int = 4,
-                   min_overlap: float = 0.5) -> SentenceCheck:
+def _supported_by(body: str, figures: set[str], words: set[str], support: str, allowed: set[str],
+                  min_overlap: float) -> list[str]:
+    reasons = []
+    missing = sorted(figures - extract_figures(support) - allowed)
+    if missing:
+        reasons.append("figures not in the cited chunks: " + ", ".join(missing))
+    if not figures and words:
+        overlap = len(words & content_words(support)) / len(words)
+        if overlap < min_overlap:
+            reasons.append(f"low word overlap with the cited chunks ({overlap:.2f})")
+    return reasons
+
+
+def check_sentence(sentence: str, chunk_text: dict[str, str], min_claim_words: int = 4, min_overlap: float = 0.5,
+                   inherited: list[str] | None = None, question: str = "") -> SentenceCheck:
     cites = find_citations(sentence)
     body = strip_citations(sentence)
     figures = extract_figures(body)
     words = content_words(body)
     if is_idk(body) or (not figures and len(words) < min_claim_words):
         return SentenceCheck(sentence, cites, needs_support=False, supported=True)
+    allowed = extract_figures(question)
+    used = cites or list(inherited or [])
     reasons = []
-    if not cites:
+    if not used:
         reasons.append("no citation")
-    unknown = [c for c in cites if c not in chunk_text]
+    unknown = [c for c in used if c not in chunk_text]
     if unknown:
         reasons.append("cites a chunk that was not in the context: " + ", ".join(unknown))
-    known = [chunk_text[c] for c in cites if c in chunk_text]
+    known = [chunk_text[c] for c in used if c in chunk_text]
     if known:
-        support = " ".join(known)
-        missing = sorted(figures - extract_figures(support))
-        if missing:
-            reasons.append("figures not in the cited chunks: " + ", ".join(missing))
-        if not figures and words:
-            overlap = len(words & content_words(support)) / len(words)
-            if overlap < min_overlap:
-                reasons.append(f"low word overlap with the cited chunks ({overlap:.2f})")
-    return SentenceCheck(sentence, cites, needs_support=True, supported=not reasons, reasons=reasons)
+        reasons += _supported_by(body, figures, words, " ".join(known), allowed, min_overlap)
+    check = SentenceCheck(sentence, cites, needs_support=True, supported=not reasons, reasons=reasons,
+                          inherited=[] if cites else list(inherited or []))
+    if reasons:
+        check.in_context = not _supported_by(body, figures, words, " ".join(chunk_text.values()), allowed, min_overlap)
+    return check
 
 
 def verify(answer: str, chunk_text: dict[str, str], remove: bool = True, min_claim_words: int = 4,
-           min_overlap: float = 0.5) -> Verification:
+           min_overlap: float = 0.5, question: str = "") -> Verification:
     """``chunk_text`` maps every chunk id given to the generator to its text."""
-    checks = [check_sentence(s, chunk_text, min_claim_words, min_overlap) for s in split_sentences(answer)]
+    sents = split_sentences(answer)
+    cites = [find_citations(s) for s in sents]
+    checks = []
+    for i, sent in enumerate(sents):
+        later = next((c for c in cites[i + 1:] if c), [])
+        checks.append(check_sentence(sent, chunk_text, min_claim_words, min_overlap, inherited=later, question=question))
     flagged = [c for c in checks if not c.supported]
     claims = sum(1 for c in checks if c.needs_support)
     caveat = ""

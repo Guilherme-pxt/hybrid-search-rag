@@ -1,0 +1,17 @@
+{
+  "bm25_ms": 0.185,
+  "dense_query_embed_ms": 0.169,
+  "dense_search_ms": 0.058,
+  "rrf_ms": 0.056,
+  "rerank_llm_ms_per_question": 6664.833,
+  "rerank_pairs_per_question": 20,
+  "rerank_llm_ms_per_pair": 333.2416,
+  "generate_ms_bm25": 2983.0,
+  "verify_ms_bm25": 0.148,
+  "generate_ms_dense": 3247.0,
+  "verify_ms_dense": 0.164,
+  "generate_ms_hybrid": 3093.0,
+  "verify_ms_hybrid": 0.133,
+  "generate_ms_hybrid_rerank": 3404.0,
+  "verify_ms_hybrid_rerank": 0.144
+}

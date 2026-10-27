@@ -104,13 +104,13 @@ class VerifierTests(unittest.TestCase):
 
     def test_flags_wrong_figure_missing_and_unknown_citations(self):
         ans = ("The meal per diem is EUR 95 per travel day [policy-travel-eu#1]. "
-               "Hotels are capped at EUR 150 per night. "
-               "Receipts are needed for taxis above EUR 20 [policy-travel-eu#7].")
+               "Receipts are needed for taxis above EUR 20 [policy-travel-eu#7]. "
+               "Hotels are capped at EUR 150 per night.")
         v = verify(ans, CHUNKS, remove=False)
         reasons = [s.reasons for s in v.sentences]
         self.assertIn("figures not in the cited chunks: 95", reasons[0])
-        self.assertIn("no citation", reasons[1])
-        self.assertTrue(any("not in the context" in r for r in reasons[2]))
+        self.assertTrue(any("not in the context" in r for r in reasons[1]))
+        self.assertIn("no citation", reasons[2])  # nothing after it cites anything
         self.assertEqual(v.flagged, 3)
         self.assertEqual(v.final_text, ans)
 
@@ -131,6 +131,24 @@ class VerifierTests(unittest.TestCase):
         self.assertEqual(v.final_text, IDK)
         v = verify(IDK, CHUNKS)
         self.assertEqual((v.flagged, v.claims), (0, 0))
+
+    def test_paragraph_citation_covers_earlier_sentences_and_question_figures_are_allowed(self):
+        ans = "The meal per diem is EUR 90 per travel day. It is paid per travel day [policy-travel-eu#1]."
+        v = verify(ans, CHUNKS, remove=False)
+        self.assertEqual(v.flagged, 0)
+        self.assertEqual(v.sentences[0].inherited, ["policy-travel-eu#1"])
+        v = verify("The meal per diem is EUR 95 per travel day. It is paid daily [policy-travel-eu#1].", CHUNKS)
+        self.assertEqual(v.flagged, 1)  # inherited citation is still checked
+        q = "What is the meal per diem for QV-TRIP7 travellers in the EU?"
+        v = verify("For QV-TRIP7 travellers the meal per diem is EUR 90 [policy-travel-eu#1].", CHUNKS, question=q)
+        self.assertEqual(v.flagged, 0)
+        v = verify("For QV-TRIP7 travellers the meal per diem is EUR 90 [policy-travel-eu#1].", CHUNKS)
+        self.assertEqual(v.flagged, 1)
+
+    def test_flag_records_whether_content_is_in_context(self):
+        v = verify("The meal per diem is USD 75 per travel day [policy-travel-eu#1]. "
+                   "Taxis are refunded up to EUR 40 [policy-travel-eu#1].", CHUNKS, remove=False)
+        self.assertEqual([s.in_context for s in v.sentences], [True, False])
 
     def test_low_overlap_claim_without_figures(self):
         v = verify("Employees must always fly business class on long routes [policy-travel-eu#1].", CHUNKS, remove=False)

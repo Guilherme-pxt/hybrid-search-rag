@@ -1,0 +1,114 @@
+{
+  "evalgen_checkout": "eval-dataset-generator",
+  "summaries": {
+    "hybrid": {
+      "items": 135,
+      "valid_json_rate": 1.0,
+      "action_accuracy": 0.8296,
+      "det_score": 0.8222,
+      "det_pass_rate": 0.8222,
+      "items_with_unsupported_numbers": 1,
+      "refusals": 0,
+      "judge_mean_1to5": null,
+      "judge_norm": null,
+      "judge_failures": null,
+      "combined": null,
+      "judge_det_agreement": null,
+      "mean_latency_s": 3.5616,
+      "by_expected_action": {
+        "answer": {
+          "n": 110,
+          "det_score": 0.7818,
+          "combined": null
+        },
+        "decline": {
+          "n": 25,
+          "det_score": 1.0,
+          "combined": null
+        }
+      }
+    },
+    "hybrid_rerank": {
+      "items": 135,
+      "valid_json_rate": 1.0,
+      "action_accuracy": 0.8889,
+      "det_score": 0.8815,
+      "det_pass_rate": 0.8815,
+      "items_with_unsupported_numbers": 1,
+      "refusals": 0,
+      "judge_mean_1to5": null,
+      "judge_norm": null,
+      "judge_failures": null,
+      "combined": null,
+      "judge_det_agreement": null,
+      "mean_latency_s": 3.8999,
+      "by_expected_action": {
+        "answer": {
+          "n": 110,
+          "det_score": 0.8545,
+          "combined": null
+        },
+        "decline": {
+          "n": 25,
+          "det_score": 1.0,
+          "combined": null
+        }
+      }
+    },
+    "bm25": {
+      "items": 135,
+      "valid_json_rate": 1.0,
+      "action_accuracy": 0.8148,
+      "det_score": 0.8074,
+      "det_pass_rate": 0.8074,
+      "items_with_unsupported_numbers": 1,
+      "refusals": 0,
+      "judge_mean_1to5": null,
+      "judge_norm": null,
+      "judge_failures": null,
+      "combined": null,
+      "judge_det_agreement": null,
+      "mean_latency_s": 3.3495,
+      "by_expected_action": {
+        "answer": {
+          "n": 110,
+          "det_score": 0.7636,
+          "combined": null
+        },
+        "decline": {
+          "n": 25,
+          "det_score": 1.0,
+          "combined": null
+        }
+      }
+    }
+  },
+  "gates": [
+    {
+      "baseline": "hybrid",
+      "candidate": "hybrid_rerank",
+      "verdict": "PASS",
+      "exit_code": 0,
+      "delta": 0.0593,
+      "delta_ci95": [
+        0.0074,
+        0.1111
+      ],
+      "reasons": [],
+      "command": "python -m evalgen --config results/evalgen/config.toml --run-dir results/evalgen gate --baseline hybrid --candidate hybrid_rerank --metric det_score"
+    },
+    {
+      "baseline": "hybrid",
+      "candidate": "bm25",
+      "verdict": "PASS",
+      "exit_code": 0,
+      "delta": -0.0148,
+      "delta_ci95": [
+        -0.0444,
+        0.0076
+      ],
+      "reasons": [],
+      "command": "python -m evalgen --config results/evalgen/config.toml --run-dir results/evalgen gate --baseline hybrid --candidate bm25 --metric det_score"
+    }
+  ]
+}

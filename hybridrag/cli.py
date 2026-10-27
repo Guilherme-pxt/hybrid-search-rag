@@ -18,6 +18,7 @@ def build_parser() -> argparse.ArgumentParser:
         "with a measured ablation."))
     p.add_argument("--config", default="config.toml", help="TOML config (default: config.toml)")
     p.add_argument("--results-dir", help="override [run].results_dir")
+    p.add_argument("--index-dir", help="override [run].index_dir")
     p.add_argument("--no-cache", action="store_true", help="do not read or write the LLM response cache")
     sub = p.add_subparsers(dest="command", required=True)
 
@@ -28,6 +29,7 @@ def build_parser() -> argparse.ArgumentParser:
     s = sub.add_parser("index", help="chunk the corpus, embed the chunks, save vectors to disk")
     s.add_argument("--embedder", choices=["lsa", "ollama", "openai_compatible"])
     s.add_argument("--embed-model", help="model name for the ollama / openai_compatible embedder")
+    s.add_argument("--no-title-header", action="store_true", help="do not prefix chunks with the document title")
 
     s = sub.add_parser("retrieve", help="show the ranked chunks for one question")
     s.add_argument("question")
@@ -43,6 +45,7 @@ def build_parser() -> argparse.ArgumentParser:
     s.add_argument("--variants", nargs="*", choices=list(P.VARIANTS),
                    help="variants to generate answers for (default: [answer].variants; none = retrieval only)")
     s.add_argument("--limit", type=int, help="first N questions only (smoke test)")
+    s.add_argument("--no-rerank", action="store_true", help="first-stage variants only, no LLM call (no answers)")
     s.add_argument("--evalgen", help="path to an eval-dataset-generator checkout (score + gate the answers)")
 
     s = sub.add_parser("run-all", help="synth, index, eval (and evalgen if configured), report")
@@ -56,6 +59,8 @@ def main(argv: list[str] | None = None) -> int:
     cfg = P.load_config(args.config)
     if args.results_dir:
         cfg["run"]["results_dir"] = args.results_dir
+    if args.index_dir:
+        cfg["run"]["index_dir"] = args.index_dir
 
     def provider():
         return build_provider(cfg["llm"], cache_path=None if args.no_cache else cfg["run"].get("cache"))
@@ -72,6 +77,8 @@ def main(argv: list[str] | None = None) -> int:
                 cfg["embedder"]["kind"] = args.embedder
             if args.embed_model:
                 cfg["embedder"]["model"] = args.embed_model
+            if args.no_title_header:
+                cfg["chunking"]["title_header"] = False
             P.step_index(cfg)
         elif args.command in ("retrieve", "answer"):
             retr = P.Retriever(cfg)
@@ -92,7 +99,7 @@ def main(argv: list[str] | None = None) -> int:
                 ans = generate_answer(prov, cfg["llm"]["model"], args.question, passages, int(cfg["answer"]["max_tokens"]))
                 ver = verify(ans.text, dict(passages), remove=not args.keep_unsupported,
                              min_claim_words=int(cfg["verifier"]["min_claim_words"]),
-                             min_overlap=float(cfg["verifier"]["min_overlap"]))
+                             min_overlap=float(cfg["verifier"]["min_overlap"]), question=args.question)
                 print("context: " + ", ".join(cid for cid, _ in passages))
                 print(f"\nraw answer:\n{ans.text}\n")
                 for s in ver.sentences:
@@ -102,9 +109,10 @@ def main(argv: list[str] | None = None) -> int:
         elif args.command == "eval":
             if args.evalgen:
                 cfg.setdefault("evalgen", {})["path"] = args.evalgen
-            P.step_eval(cfg, provider(), answer_variants=args.variants, limit=args.limit)
+            P.step_eval(cfg, None if args.no_rerank else provider(), answer_variants=args.variants, limit=args.limit,
+                        rerank=not args.no_rerank)
             path = cfg.get("evalgen", {}).get("path") or os.environ.get("HYBRIDRAG_EVALGEN_PATH", "")
-            if path and not args.limit:
+            if path and not args.limit and not args.no_rerank:
                 from .evalgen_bridge import run_evalgen
 
                 run_evalgen(cfg, path)
